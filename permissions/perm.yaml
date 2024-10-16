@@ -49,35 +49,35 @@ Resources:
          Value: !Sub ${environment}	
   
   myECSRole:
-	Type: AWS::IAM::Role
-	  Properties:
-	    RoleName: myecsrole
-	    Path: /
-	    AssumeRolePolicyDocument:
-	      Statement:
-	        - Effect: Allow
-	          Principal:
-	            Service:
-	              - ecs-tasks.amazonaws.com
-	          Action:
-	              - sts:AssumeRole
+    Type: AWS::IAM::Role
+      Properties:
+        RoleName: myecsrole
+        Path: /
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service:
+                 - ecs-tasks.amazonaws.com
+              Action:
+                - sts:AssumeRole
 
-	    Policies:
-	     - PolicyName: "ECSFullAccessForMe"
-	       PolicyDocument:
-	         Version: "2012-10-17"
-	         Statement:
-		         -
-		           Effect: "Allow"
-		           Action:
-		              - ecr:GetAuthorizationToken
-		              - ecr:BatchCheckLayerAvailability
-		              - ecr:GetDownloadUrlForLayer
-		              - ecr:BatchGetImage
-		              - logs:BatchGetImage
-		              - logs:PutLogEvents
-		           Resource: "*"
-	      
+        Policies:
+         - PolicyName: "ECSFullAccessForMe"
+           PolicyDocument:
+             Version: "2012-10-17"
+             Statement:
+               -
+                Effect: "Allow"
+                Action:
+                   - ecr:GetAuthorizationToken
+                   - ecr:BatchCheckLayerAvailability
+                   - ecr:GetDownloadUrlForLayer
+                   - ecr:BatchGetImage
+                   - logs:BatchGetImage
+                   - logs:PutLogEvents
+                Resource: "*"
+
 Outputs:
   PublicSecurityGroup:
     Value: !Ref publicSG
