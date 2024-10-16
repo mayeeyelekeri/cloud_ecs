@@ -85,12 +85,6 @@ Outputs:
       "Name" :
         Fn::Sub: "${AWS::StackName}-PUBLIC-SG"
   
-  Ec2InstanceProfile:
-    Value: !Ref ec2InstanceProfile
-    Export:
-      "Name" :
-        Fn::Sub: "${AWS::StackName}-EC2-INSTANCE-PROFILE"
-  
   MyECSRole:
     Value: !Ref myECSRole
     Export:
