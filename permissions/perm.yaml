@@ -50,7 +50,7 @@ Resources:
   
   myECSRole:
     Type: AWS::IAM::Role
-      Properties:
+    Properties:
         RoleName: myecsrole
         Path: /
         AssumeRolePolicyDocument:
