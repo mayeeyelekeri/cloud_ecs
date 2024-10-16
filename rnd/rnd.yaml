@@ -1,0 +1,44 @@
+Description: "All Experimentation" 
+
+Parameters: 
+  networkStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: nw
+
+  permStackName:
+    Description: Name of the base stack with all permission resources
+    Type: String
+    Default: perm
+
+  ec2StackName:
+    Description: Name of the base stack with ec2 instances launched 
+    Type: String
+    Default: ec2
+
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+      - prod 
+
+Resources:
+  codebuildBucket:
+    Description: "Create S3 bucket for storing codebuild artifacts"
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join ['-', ["hello", !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]] ]]
+      
+      Tags:
+       - Key: Name
+         Value: !Join ['-', ["hello", !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]] ]]
+       - Key: Environment
+         Value: !Sub ${environment}	
+      
+Outputs:
+  BucketName:
+    Value: !Ref codebuildBucket
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-CODEBUILD-BUCKET"

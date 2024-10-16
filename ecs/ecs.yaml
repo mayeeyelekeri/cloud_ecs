@@ -1,0 +1,134 @@
+Description: "ECS Cluster and springdemo application"
+
+Parameters: 
+  networkStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: nw
+
+  permStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: perm
+
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+
+Conditions: 
+  createOnlyProdResources: 
+    !Equals [ !Ref environment, "dev" ] 
+
+Resources:
+  myEcsCluster:                                                                
+    Description: "New Cluster"                        
+    Type: AWS::ECS::Cluster
+    Properties:                                                                  
+     ClusterName: !Sub '{{resolve:ssm:/${environment}/ecs/cluster_name}}'                 
+     CapacityProviders: 
+       - FARGATE
+     ClusterSettings: 
+       - Name: containerInsights
+         Value: enabled 
+     Tags:
+       - Key: Name
+         Value: !Join ["-", [Fn::Sub: "${AWS::StackName}", "ECSCluster"] ]
+       - Key: Environment
+         Value: !Sub ${environment}
+
+  myEcsTaskDefinition: 
+    Description: "New task definition" 
+    Type: AWS::ECS::TaskDefinition
+    Properties:                                                                  
+     Family: !Sub '{{resolve:ssm:/${environment}/ecs/task_name}}'                 
+     RequiresCompatibilities: 
+       - FARGATE
+     ExecutionRoleArn: 
+		Fn::ImportValue: 
+		     Fn::Sub: "${networkStackName}-ECS-ROLE"
+     Memory: 3 GB
+     Cpu: 1 vCPU 
+     NetworkMode: awsvpc
+     ContainerDefinitions: 
+       - Name: SpringDemo
+         Image: !Sub '{{resolve:ssm:/${environment}/ecs/ecr_repository}}'                 
+         PortMappings: 
+           - ContainerPort: 8080
+             Protocol: tcp 
+
+     Tags:
+       - Key: Name
+         Value: !Join ["-", [Fn::Sub: "${AWS::StackName}", "Task"] ]
+       - Key: Environment
+         Value: !Sub ${environment}
+
+  myEcsService:
+    Type: 'AWS::ECS::Service'
+    Properties:
+      ServiceName: ecsService 
+      Cluster: !Ref myEcsCluster
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue: 
+               Fn::Sub: "${permStackName}-PUBLIC-SG"
+          Subnets:
+            - Fn::ImportValue: 
+               Fn::Sub: "${networkStackName}-PUBLIC-SUBNET1"
+      TaskDefinition: !Ref myEcsTaskDefinition
+      Tags:
+       - Key: Name
+         Value: !Join ["-", [Fn::Sub: "${AWS::StackName}", "Service"] ]
+       - Key: Environment
+         Value: !Sub ${environment}
+
+  myECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: myecsrole
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Policies:
+        - PolicyName: "ECSFullAccessForMe"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                      - ecr:GetAuthorizationToken
+                      - ecr:BatchCheckLayerAvailability
+                      - ecr:GetDownloadUrlForLayer
+                      - ecr:BatchGetImage
+                      - logs:BatchGetImage
+                      - logs:PutLogEvents
+                  Resource: "*"
+Outputs: 
+  ECSClusterID: 
+    Description: ECS Cluster 
+    Value: !Ref myEcsCluster 
+
+  ECSTaskDefinition: 
+    Description: ECS Task 
+    Value: !Ref myEcsTaskDefinition 
+
+  MyRepositoryPath: 
+    Description: ECR Repo 
+    Value: !Sub '{{resolve:ssm:/${environment}/ecs/ecr_repository}}'                 
+
+  MyRepositoryArn: 
+    Description: ECR Repo 
+    Value: !Sub '{{resolve:ssm:/${environment}/ecs/ecr_repository_arn}}'                 

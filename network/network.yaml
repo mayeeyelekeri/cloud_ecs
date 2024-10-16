@@ -1,0 +1,219 @@
+Description: "Network stack to create VPC, Subnets, IG, NAT Gateway, and all associations"
+
+Parameters: 
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+      - prod 
+
+Resources:
+  myVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Sub '{{resolve:ssm:/${environment}/network/vpc_cidr}}'
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      Tags:
+       - Key: Name
+         Value: !Join ["- ", [Fn::Sub: "${AWS::StackName}", !Sub '{{resolve:ssm:/${environment}/network/vpc_cidr}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+         
+  publicSubnet1: 
+    Type: AWS::EC2::Subnet 
+    DependsOn: myVPC
+    Properties:
+      AvailabilityZone: !Sub '{{resolve:ssm:/${environment}/network/zone1}}' 
+      CidrBlock: !Sub '{{resolve:ssm:/${environment}/network/public_subnet1_cidr}}'
+      MapPublicIpOnLaunch: 'true' 
+      VpcId: !Ref myVPC
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", ["PublicSubnet1", 
+                               !Sub '{{resolve:ssm:/${environment}/network/public_subnet1_cidr}}',
+                               !Sub '{{resolve:ssm:/${environment}/network/zone1}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+     
+  publicSubnet2: 
+    Type: AWS::EC2::Subnet 
+    DependsOn: myVPC
+    Properties:
+      AvailabilityZone: !Sub '{{resolve:ssm:/${environment}/network/zone2}}' 
+      CidrBlock: !Sub '{{resolve:ssm:/${environment}/network/public_subnet2_cidr}}'
+      MapPublicIpOnLaunch: 'true' 
+      VpcId: !Ref myVPC
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", ["PublicSubnet2", 
+                               !Sub '{{resolve:ssm:/${environment}/network/public_subnet2_cidr}}',
+                               !Sub '{{resolve:ssm:/${environment}/network/zone2}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+     
+  privateSubnet1: 
+    Type: AWS::EC2::Subnet 
+    DependsOn: myVPC
+    Properties:
+      AvailabilityZone: !Sub '{{resolve:ssm:/${environment}/network/zone1}}' 
+      CidrBlock: !Sub '{{resolve:ssm:/${environment}/network/private_subnet1_cidr}}'
+      MapPublicIpOnLaunch: 'true' 
+      VpcId: !Ref myVPC
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", ["PrivateSubnet1", 
+                               !Sub '{{resolve:ssm:/${environment}/network/private_subnet1_cidr}}',
+                               !Sub '{{resolve:ssm:/${environment}/network/zone1}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+     
+  privateSubnet2: 
+    Type: AWS::EC2::Subnet 
+    DependsOn: myVPC
+    Properties:
+      AvailabilityZone: !Sub '{{resolve:ssm:/${environment}/network/zone2}}' 
+      CidrBlock: !Sub '{{resolve:ssm:/${environment}/network/private_subnet2_cidr}}'
+      MapPublicIpOnLaunch: 'true' 
+      VpcId: !Ref myVPC
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", ["PrivateSubnet2", 
+                               !Sub '{{resolve:ssm:/${environment}/network/private_subnet2_cidr}}',
+                               !Sub '{{resolve:ssm:/${environment}/network/zone2}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+     
+  myIG: 
+    Type: AWS::EC2::InternetGateway 
+    Properties:
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", "Internet Gateway"] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+  
+  attachIG:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref myIG 
+      VpcId: !Ref myVPC 
+      
+  publicRouteTable: 
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref myVPC 
+      Tags: 
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", "Internet Route Table"] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+      
+  privateRouteTable: 
+    Type: AWS::EC2::RouteTable
+    Properties: 
+      VpcId: !Ref myVPC 
+      Tags: 
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", " Private Route Table"] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+      
+  mainOpenRoute:  
+    Type: AWS::EC2::Route
+    Properties: 
+      RouteTableId: !Ref publicRouteTable
+      DestinationCidrBlock: !Sub '{{resolve:ssm:/${environment}/network/open_cidr}}'
+      GatewayId: !Ref myIG
+
+  publicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref publicSubnet1
+      RouteTableId: !Ref publicRouteTable
+
+  publicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: publicSubnet2
+      RouteTableId:
+        Ref: publicRouteTable
+
+  natGatewayEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", !Sub '{{resolve:ssm:/${environment}/network/vpc_cidr}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+
+  natGateway:
+   Type: AWS::EC2::NatGateway
+   Properties:
+      AllocationId: !GetAtt natGatewayEIP.AllocationId
+      SubnetId: !Ref publicSubnet1
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", ["Nat Gateway in subnet", !Sub '{{resolve:ssm:/${environment}/network/public_subnet1_cidr}}'] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+
+  routeNATGateway:
+    DependsOn: [ natGateway ]
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref privateRouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      NatGatewayId: !Ref natGateway
+
+  privateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: privateSubnet1
+      RouteTableId:
+        Ref: privateRouteTable
+
+  privateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: privateSubnet2
+      RouteTableId:
+        Ref: privateRouteTable
+
+Outputs:
+  VpcId: 
+    Value: !Ref myVPC
+    Export: 
+      "Name" : 
+        Fn::Sub: "${AWS::StackName}-VPCID"
+
+  PublicSubnet1:
+    Value: !Ref publicSubnet1
+    Export: 
+      "Name" : 
+        Fn::Sub: "${AWS::StackName}-PUBLIC-SUBNET1"
+
+  PublicSubnet2:
+    Value: !Ref publicSubnet2
+    Export: 
+      "Name" : 
+        Fn::Sub: "${AWS::StackName}-PUBLIC-SUBNET2"
+
+  PrivateSubnet1:
+    Value: !Ref privateSubnet1
+    Export: 
+      "Name" : 
+        Fn::Sub: "${AWS::StackName}-PRIVATE-SUBNET1"
+
+  PrivateSubnet2:
+    Value: !Ref privateSubnet2
+    Export: 
+      "Name" : 
+        Fn::Sub: "${AWS::StackName}-PRIVATE-SUBNET2"
+

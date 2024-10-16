@@ -1,0 +1,126 @@
+Description: "Spinup few servers for testing"
+
+Parameters: 
+  networkStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: nw
+
+  permStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: perm
+
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+      - prod 
+
+Conditions: 
+  createOnlyProdResources: 
+    !Equals [ !Ref environment, "dev" ] 
+
+Resources:
+  ec2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ec2InstanceRole
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: s3accesspolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:GetObjectVersion
+                Resource: '*'
+
+  ec2InstanceProfile:
+    Description: "NUTS" 
+    Type: AWS::IAM::InstanceProfile 
+    Properties: 
+      Path: "/" 
+      Roles: 
+        - 
+          Ref: ec2InstanceRole 
+
+  publicInstance1:                                                                
+    Description: "Open to public access, on http port 80"                        
+    Type: AWS::EC2::Instance
+    
+    # 5 minutes           
+    CreationPolicy: 
+      ResourceSignal:
+        Timeout: PT5M     
+    Metadata:
+      "AWS::CloudFormation::Init":
+        configSets:
+          setup:
+            - install_code_deploy_agent
+        install_code_deploy_agent:
+          packages:
+            yum:
+              ruby: []
+          files:
+            "/home/ec2-user/install":
+              source: "https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/latest/install"
+              mode: 000755
+              owner: root
+              group: root
+          commands: 
+            "install_agent"
+              "command": "./install_auto" 
+              "cwd": "/home/ec-user"
+          packages:
+            sysvinit:
+              codedeploy-agent:
+                enabled: true
+                ensureRunning: true
+                                                      
+    Condition: createOnlyProdResources 
+    DependsOn: ec2InstanceProfile                                          
+    Properties:                                                                  
+     ImageId: !Sub '{{resolve:ssm:/${environment}/ec2/ami_id}}'                 
+     KeyName: !Sub '{{resolve:ssm:/${environment}/ec2/keyname}}'                
+     InstanceType: !Sub '{{resolve:ssm:/${environment}/ec2/instance_type}}'     
+     IamInstanceProfile: !Ref ec2InstanceProfile                                    
+     SecurityGroupIds:                                                          
+        - Fn::ImportValue:                                                      
+           Fn::Sub: "${permStackName}-PUBLIC-SG"                                
+     SubnetId:                                                                  
+        Fn::ImportValue:                                                        
+           Fn::Sub: "${networkStackName}-PUBLIC-SUBNET1"                        
+     VpcId:                                                                     
+        Fn::ImportValue:                                                        
+          Fn::Sub: "${networkStackName}-VPCID"                                  
+                                                                                
+     UserData:                                                                  
+       Fn::Base64:                                                              
+         !Sub |                                                                 
+            #!/bin/bash -x                                                       
+            sudo yum update -y
+            sudo yum install ruby wget -y
+            sudo wget https://aws-codedeploy-us-east-1.s3.us-east-1.amazonaws.com/latest/install
+            sudo chmod +x ./install
+            sudo ./install auto
+            sudo systemctl start codedeploy-agent
+            sudo systemctl status codedeploy-agent
+
+     Tags:
+       - Key: Name
+         Value: !Join ["-", [Fn::Sub: "${AWS::StackName}", "PublicInstance1"] ]
+       - Key: Environment
+         Value: !Sub ${environment}
+

@@ -1,0 +1,100 @@
+Description: "Permission stack to create Security Groups to launch EC2 instances"
+
+Parameters: 
+  networkStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: nw
+
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+      - prod 
+
+Resources:
+  publicSG:
+    Description: "Allow TCP/80, TCP/8080 and SSH connection"
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to client host
+      VpcId: 
+         Fn::ImportValue: 
+           Fn::Sub: "${networkStackName}-VPCID"
+
+      SecurityGroupIngress:
+        - Description: "Allow port 80" 
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Sub '{{resolve:ssm:/${environment}/network/open_cidr}}'
+
+        - Description: "Allow port 8080" 
+          IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: !Sub '{{resolve:ssm:/${environment}/network/open_cidr}}'
+
+        - Description: "Allow ssh port 22" 
+          IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Sub '{{resolve:ssm:/${environment}/network/open_cidr}}'
+
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", "Public Security Group"] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+  
+  myECSRole:
+	Type: AWS::IAM::Role
+	  Properties:
+	    RoleName: myecsrole
+	    Path: /
+	    AssumeRolePolicyDocument:
+	      Statement:
+	        - Effect: Allow
+	          Principal:
+	            Service:
+	              - ecs-tasks.amazonaws.com
+	          Action:
+	              - sts:AssumeRole
+
+	    Policies:
+	     - PolicyName: "ECSFullAccessForMe"
+	       PolicyDocument:
+	         Version: "2012-10-17"
+	         Statement:
+		         -
+		           Effect: "Allow"
+		           Action:
+		              - ecr:GetAuthorizationToken
+		              - ecr:BatchCheckLayerAvailability
+		              - ecr:GetDownloadUrlForLayer
+		              - ecr:BatchGetImage
+		              - logs:BatchGetImage
+		              - logs:PutLogEvents
+		           Resource: "*"
+	      
+Outputs:
+  PublicSecurityGroup:
+    Value: !Ref publicSG
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-PUBLIC-SG"
+  
+  Ec2InstanceProfile:
+    Value: !Ref ec2InstanceProfile
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-EC2-INSTANCE-PROFILE"
+  
+  MyECSRole:
+    Value: !Ref myECSRole
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-ECS-ROLE"
+        
+

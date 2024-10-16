@@ -1,0 +1,84 @@
+Description: "Create Application Load Balancer"
+
+Parameters: 
+  networkStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: nw
+
+  permStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: perm
+
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+      - prod 
+
+  albName:
+    Description: springdemo
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    Default: springdemo
+    
+Resources:
+ alb:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub ${albName}
+      SecurityGroups: 
+        - Fn::ImportValue: 
+           Fn::Sub: "${permStackName}-PUBLIC-SG"
+      Subnets: 
+        - Fn::ImportValue: 
+           Fn::Sub: "${networkStackName}-PUBLIC-SUBNET1"
+        - Fn::ImportValue: 
+           Fn::Sub: "${networkStackName}-PUBLIC-SUBNET2"
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", "alb "] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+
+ listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref alb  
+      Port: 80
+      Protocol: HTTP  
+      DefaultActions: 
+        - Type: "forward" 
+          TargetGroupArn: !Ref targetGroup
+
+ targetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: my-target-group
+      Protocol: HTTP
+      Port: !Sub '{{resolve:ssm:/${environment}/alb/application_port}}'  
+      VpcId: 
+         Fn::ImportValue: 
+           Fn::Sub: "${networkStackName}-VPCID"
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", "TargetGroup"] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+
+Outputs:
+  LoadBalancer:
+    Value: !Ref alb
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-ALB"
+  TargetGroup:
+    Value: !Ref targetGroup
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-TARGET-GROUP"
+
+

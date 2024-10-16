@@ -1,0 +1,155 @@
+Description: "Create CodeBuild Projects"
+
+Parameters: 
+  networkStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: nw
+
+  permStackName:
+    Description: Name of the base stack with all network resources
+    Type: String
+    Default: perm
+
+  environment: 
+    Type: String 
+    Default: dev 
+    AllowedValues: 
+      - dev
+      - prod 
+
+  codebuildProjectName:
+    Description: springdemo
+    Type: String
+    MinLength: 1
+    MaxLength: 255
+    Default: springdemo
+    
+Resources:
+  codebuildBucket:
+    Description: "Create S3 bucket for storing codebuild artifacts"
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join ["-", [!Sub '{{resolve:ssm:/${environment}/codebuild/bucket_prefix}}', !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]] ]]
+      
+      Tags:
+       - Key: Name
+         Value: !Join [" - ", [Fn::Sub: "${AWS::StackName}", "bucket "] ]
+       - Key: Environment
+         Value: !Sub ${environment}	
+  
+  gitCreds1:
+    Type: AWS::CodeBuild::SourceCredential
+    Properties:
+        AuthType: '{{resolve:secretsmanager:git_creds:SecretString:auth_type}}'
+        ServerType: '{{resolve:secretsmanager:git_creds:SecretString:server_type}}'
+        Token: '{{resolve:secretsmanager:git_creds:SecretString:token}}'
+        Username: '{{resolve:secretsmanager:git_creds:SecretString:username}}'
+  
+  codebuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+     Name: !Sub '{{resolve:ssm:/${environment}/codebuild/project_name}}' 
+     Description: some build info 
+
+     Source: 
+       Type: GITHUB
+       Location: !Sub '{{resolve:ssm:/${environment}/codebuild/git_repo}}'
+       GitCloneDepth: 1
+       BuildSpec: buildspec.yml
+       Auth:
+          Resource: !Ref gitCreds1
+          Type: OAUTH
+
+     Artifacts: # drop the build artifacts of S3 bucket that hosts static website
+        Type: S3
+        Location: !Sub arn:aws:s3:::${codebuildBucket}
+        EncryptionDisabled: True
+
+     ServiceRole: !Ref myCodebuildProjectRole   
+
+     Environment: # use Ubuntu standard v7
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:3.0"
+
+     LogsConfig:
+        CloudWatchLogs:
+          Status: ENABLED
+          GroupName: "build-logs"
+          StreamName: !Sub '{{resolve:ssm:/${environment}/codebuild/project_name}}' 
+     
+  
+  myCodebuildProjectRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: mycodebuildrole
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Policies:
+        - PolicyName: "logs"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                      - logs:CreateLogGroup
+                      - logs:CreateLogStream
+                      - logs:PutLogEvents
+                      - ecr:GetAuthorizationToken
+                      - ssm:GetParameters
+                  Resource: "*"
+        - PolicyName: "S3"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                      - s3:GetObject
+                      - s3:PutObject
+                      - s3:GetObjectVersion
+                  Resource: "*"
+        - PolicyName: "Reports"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+                -
+                  Effect: "Allow"
+                  Action:
+                      - codebuild:CreateReportGroup
+                      - codebuild:CreateReport
+                      - codebuild:UpdateReport
+                      - codebuild:BatchPutTestCases
+                      - codebuild:BatchPutCodeCoverages
+                  Resource: "*"
+
+Outputs:
+  BucketName:
+    Value: !Ref codebuildBucket
+    Export:
+      "Name" :
+        Fn::Sub: "${AWS::StackName}-CODEBUILD-BUCKET"
+
+  ProjectName:
+    Value: !Ref codebuildProject
+    Export:
+      "Name" :
+        !Sub "${AWS::StackName}-CODEBUILD-PROJECT"
+
+  GitCreds:
+    Value: !Ref gitCreds1
+    Export:
+      "Name" :
+        !Sub "${AWS::StackName}-GIT-CREDS"
+
+
