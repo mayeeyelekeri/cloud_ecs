@@ -4,3 +4,5 @@
 . ~/INFO/secrets/ecs_params.sh  $1
  
 ./pushDockerImageToECR.sh
+
+

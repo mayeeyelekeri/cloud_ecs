@@ -90,5 +90,3 @@ Outputs:
     Export:
       "Name" :
         Fn::Sub: "${AWS::StackName}-ECS-ROLE"
-        
-

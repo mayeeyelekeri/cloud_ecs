@@ -1,6 +1,6 @@
 #!/bin/bash 
 
-dirs=(network permissions codebuild ec2 codedeploy) 
+dirs=(network permissions   ecs) 
 #dirs=(network permissions alb autoscale codebuild codedeploy codepipeline) 
 
 # Change into each directory and execute update stack script 
