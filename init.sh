@@ -21,7 +21,7 @@ echo environment is $environment
 #./autoscale/init.sh $1
 #./codebuild/init.sh $1
 #./codepipeline/init.sh $1
-./ecs/init.sh $1
+cd ecs && ./init.sh $1
 
 start=$(date +%s) 
 echo "Elapsed Time: (using \$SECONDS): $SECONDS  seconds" 
